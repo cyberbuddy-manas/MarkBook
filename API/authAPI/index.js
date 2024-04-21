@@ -30,7 +30,7 @@ try {
 
 let PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-    console.log(`Server is up and running on ${PORT} ...`);
+    console.log(`Server is up and running on ${ PORT }`);
 });
 
 app.get("/", (req, res) => {
@@ -50,31 +50,48 @@ function generateToken(payload) {
     });
 }
 
-app.post('/user/signup', async (req, res) => {
+app.get('/user/getBookmarks', async (req, res) => {
     try {
-        const { userID, name, email, password, myTags } = req.body;
-        if (!userID || !name || !email || !password) {
-            return res.status(400).json({ error: "Missing required fields" });
+        const { obj } = req.query;
+        const token = req?.headers?.authorization?.split(' ')[1];
+        if (!obj) {
+            const bookmark = await appTag.find().exec();
+            console.log(bookmark);
+            res.status(200).json({
+                "message": "Successfull",
+                "data": bookmark,
+                "isLogin": false,
+                "status_code": 200
+            })
+        } else {
+            if (!token) {
+                return res.status(401).json({
+                    status_code: 401,
+                    data: "",
+                    msg: 'Unauthorized - Token not provided'
+                });
+            }
+            const getUser = appUser.find({ token: token });
+            if (!getUser) {
+                return res.status(401).json({
+                    status_code: 401,
+                    data: "",
+                    msg: 'Invalid token'
+                });
+            }
+            else {
+                const bookmark = await appTag.find().exec();
+                console.log(bookmark);
+                res.status(200).json({
+                    "message": "Successfull",
+                    "data": bookmark,
+                    "isLogin": true,
+                    "status_code": 200
+                })
+            }
         }
 
-        const existingUser = await appUser.findOne({ email });
-        if (existingUser) {
-            return res.status(400).json({ error: "User already exists" });
-        }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        const newUser = new appUser({
-            userID,
-            name,
-            email,
-            password: hashedPassword,
-            myTags
-        });
-
-        await newUser.save();
-
-        res.status(201).json({ message: "User created successfully" });
     } catch (error) {
         console.error("Error creating user:", error);
         res.status(500).json({ error: "Internal server error" });
@@ -117,24 +134,54 @@ app.post("/user/login", async (req, res) => {
     }
 });
 
-app.post('/user/token', async function (req, res) {
-    const token = req.headers.authorization;
-
-    if (!token) { return res.status(401).json({ error: 'Token is required' }); }
-
-    const { email } = req.body;
-
+app.post('/user/createBookmark', async function (req, res) {
     try {
-        const user = await appUser.findOne({ email });
+        const token = req?.headers?.authorization?.split(' ')[1];
+        const { title, tags, public } = req.body;
+        console.log("Working");
 
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
+        if (!token) {
+            return res.status(401).json({
+                status_code: 401,
+                data: "",
+                msg: 'Unauthorized - Token not provided'
+            });
         }
+        console.log("Working");
 
-        if (user.token == token.slice(7)) {
-            return res.status(200).json({ message: 'Token is valid' });
+        const getUser = appUser.find({ token: token });
+        if (!getUser) {
+            return res.status(401).json({
+                status_code: 401,
+                data: "",
+                msg: 'Invalid token'
+            });
+            console.log("Working");
+
         } else {
-            return res.status(401).json({ error: 'Invalid token' });
+
+
+            if (!title || !tags || !public) {
+                return res.status(400).json({ error: "Missing required fields" });
+            } else {
+
+
+                const newTag = new appTag({
+                    appUser: getUser._id,
+                    title,
+                    author: getUser.name,
+                    tags,
+                    public,
+                });
+                console.log("Working");
+
+                await newTag.save();
+                return res.status(200).json({
+                    "message": "Successfull",
+                    "data": newTag,
+                    "status_code": 200
+                })
+            }
         }
     } catch (error) {
         console.error('Error retrieving user or comparing tokens:', error);
